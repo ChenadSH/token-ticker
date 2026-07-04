@@ -75,7 +75,7 @@ idf.py -p COM_PORT flash monitor
 ### 配置
 
 1. 将 Micro SD 卡格式化为 FAT32。
-2. 在根目录创建 `sdcard-config.json`（参见[配置说明](#配置说明)）。
+2. 在 SD 卡根目录创建 `token-ticker/config.json`（参见[配置说明](#配置说明)）。
 3. 插入 SD 卡并启动设备。
 
 完整示例见 [docs/examples/sdcard-config.example.json](docs/examples/sdcard-config.example.json)。

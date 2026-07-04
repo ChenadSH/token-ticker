@@ -75,7 +75,7 @@ idf.py -p COM_PORT flash monitor
 ### Provision
 
 1. Format a Micro SD card as FAT32.
-2. Create `sdcard-config.json` at the root (see [Configuration](#configuration)).
+2. Create `token-ticker/config.json` at the SD card root (see [Configuration](#configuration)).
 3. Insert the SD card and boot the device.
 
 See [docs/examples/sdcard-config.example.json](docs/examples/sdcard-config.example.json) for a complete example.
