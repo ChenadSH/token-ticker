@@ -88,30 +88,53 @@ The device reads configuration from an SD card on first boot and persists to NVS
 
 ```json
 {
-  "wifi": {
-    "ssid": "YourNetwork",
-    "password": "YourPassword"
-  },
-  "providers": {
-    "minimax": {
-      "group_id": "your-group-id",
-      "api_key": "your-api-key",
-      "base_url": "https://api.minimax.chat/v1"
+    "version": 1,
+    "device": {
+        "timezone": "Asia/Shanghai",
+        "ntp_enabled": true,
+        "ntp_sync_hours": 24,
+        "sleep_schedule": {
+            "enabled": true,
+            "wake_time": "08:00",
+            "sleep_time": "24:00",
+            "manual_wake_minutes": 5
+        }
+    },
+    "wifi": {
+        "enabled": true,
+        "ssid": "REPLACE_WITH_YOUR_WIFI_SSID",
+        "password": "REPLACE_WITH_YOUR_WIFI_PASSWORD"
+    },
+    "display": {
+        "active_provider_id": "minimax-cn",
+        "weather_enabled": false
+    },
+    "providers": [
+        {
+            "id": "minimax-cn",
+            "type": "minimax",
+            "enabled": true,
+            "region": "cn",
+            "api_key": "REPLACE_WITH_YOUR_MINIMAX_API_KEY"
+        }
+    ],
+    "weather": {
+        "enabled": false
     }
-  },
-  "refresh_interval_min": 15,
-  "timezone_offset": 8
 }
 ```
 
 | Key | Description |
 |-----|-------------|
+| `device.timezone` | Timezone for display and NTP |
+| `device.sleep_schedule` | Device sleep/wake schedule |
 | `wifi.ssid` | Wi-Fi network name |
 | `wifi.password` | Wi-Fi password |
-| `providers.<name>.group_id` | Provider group/account ID |
-| `providers.<name>.api_key` | Provider API key |
-| `refresh_interval_min` | Polling interval in minutes |
-| `timezone_offset` | UTC offset in hours |
+| `display.active_provider_id` | Which provider to show on screen |
+| `providers[].id` | Unique provider identifier |
+| `providers[].type` | Provider type (e.g. `minimax`) |
+| `providers[].region` | Provider region (e.g. `cn`) |
+| `providers[].api_key` | Provider API key |
 
 ---
 

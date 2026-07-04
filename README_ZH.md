@@ -88,30 +88,53 @@ idf.py -p COM_PORT flash monitor
 
 ```json
 {
-  "wifi": {
-    "ssid": "YourNetwork",
-    "password": "YourPassword"
-  },
-  "providers": {
-    "minimax": {
-      "group_id": "your-group-id",
-      "api_key": "your-api-key",
-      "base_url": "https://api.minimax.chat/v1"
+    "version": 1,
+    "device": {
+        "timezone": "Asia/Shanghai",
+        "ntp_enabled": true,
+        "ntp_sync_hours": 24,
+        "sleep_schedule": {
+            "enabled": true,
+            "wake_time": "08:00",
+            "sleep_time": "24:00",
+            "manual_wake_minutes": 5
+        }
+    },
+    "wifi": {
+        "enabled": true,
+        "ssid": "REPLACE_WITH_YOUR_WIFI_SSID",
+        "password": "REPLACE_WITH_YOUR_WIFI_PASSWORD"
+    },
+    "display": {
+        "active_provider_id": "minimax-cn",
+        "weather_enabled": false
+    },
+    "providers": [
+        {
+            "id": "minimax-cn",
+            "type": "minimax",
+            "enabled": true,
+            "region": "cn",
+            "api_key": "REPLACE_WITH_YOUR_MINIMAX_API_KEY"
+        }
+    ],
+    "weather": {
+        "enabled": false
     }
-  },
-  "refresh_interval_min": 15,
-  "timezone_offset": 8
 }
 ```
 
 | 配置项 | 说明 |
 |--------|------|
+| `device.timezone` | 时区，用于显示和 NTP 同步 |
+| `device.sleep_schedule` | 设备休眠/唤醒计划 |
 | `wifi.ssid` | Wi-Fi 网络名称 |
 | `wifi.password` | Wi-Fi 密码 |
-| `providers.<name>.group_id` | 供应商分组/账户 ID |
-| `providers.<name>.api_key` | 供应商 API 密钥 |
-| `refresh_interval_min` | 轮询间隔（分钟） |
-| `timezone_offset` | UTC 偏移（小时） |
+| `display.active_provider_id` | 屏幕显示的供应商 ID |
+| `providers[].id` | 供应商唯一标识符 |
+| `providers[].type` | 供应商类型（如 `minimax`） |
+| `providers[].region` | 供应商区域（如 `cn`） |
+| `providers[].api_key` | 供应商 API 密钥 |
 
 ---
 
