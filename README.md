@@ -72,6 +72,38 @@ idf.py build
 idf.py -p COM_PORT flash monitor
 ```
 
+### Enable exFAT / FAT Volume Label (Optional)
+
+If your TF card uses the **exFAT format** (typically > 32 GB), the default ESP-IDF FATFS component does not support it out of the box and you need to enable it manually.
+
+In `.espressif\v6.0.2\esp-idf\components`, enable exFAT support by changing the `FF_FS_EXFAT` macro from `0` to `1`:
+
+```c
+#define FF_FS_EXFAT 1   // change from 0 to 1
+```
+
+Enable 64-bit LBA support (exFAT requires large-capacity storage support, so `FF_LBA64` must also be enabled):
+
+```c
+#define FF_LBA64 1      // change from 0 to 1
+```
+
+Then enable the corresponding option in menuconfig:
+
+```bash
+idf.py menuconfig
+```
+
+Navigate to:
+
+```
+  └── Component config
+        └── FAT Filesystem support
+              └── Use FATFS volume label   ← enable
+```
+
+> Skip this section if your SD card stays on FAT32.
+
 ### Provision
 
 1. Format a Micro SD card as FAT32.

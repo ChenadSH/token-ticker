@@ -72,6 +72,38 @@ idf.py build
 idf.py -p COM_PORT flash monitor
 ```
 
+### 启用 exFAT / FAT 卷标（可选）
+
+如果你的 TF 卡使用 **exFAT 格式**（通常容量 > 32 GB），默认的 ESP-IDF FATFS 组件不支持，需要手动启用。
+
+在 `.espressif\v6.0.2\esp-idf\components` 中启用 exFAT 支持，将 `FF_FS_EXFAT` 的宏定义从 `0` 改为 `1`：
+
+```c
+#define FF_FS_EXFAT 1   // 从 0 改为 1
+```
+
+启用 64 位 LBA 支持（exFAT 需要大容量存储支持，因此也需要开启 `FF_LBA64`）：
+
+```c
+#define FF_LBA64 1      // 从 0 改为 1
+```
+
+然后在 menuconfig 中勾选对应选项：
+
+```bash
+idf.py menuconfig
+```
+
+依次进入：
+
+```
+  └── Component config
+        └── FAT Filesystem support
+              └── Use FATFS volume label   ← 勾选启用
+```
+
+> 若 SD 卡仍为 FAT32，可跳过本节。
+
 ### 配置
 
 1. 将 Micro SD 卡格式化为 FAT32。
