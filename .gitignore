@@ -108,3 +108,5 @@ logs/
 # =============================================================================
 TODO.local.md
 NOTES.local.md
+firmware/idf-driver-esp32-usb-jtag-2021-07-15.zip
+firmware/idf-env.exe
