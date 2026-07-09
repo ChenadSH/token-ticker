@@ -11,6 +11,7 @@
 typedef enum
 {
     TOKEN_HTTP_METHOD_GET = 0,
+    TOKEN_HTTP_METHOD_POST,
 } http_method_t;
 
 typedef enum
@@ -28,6 +29,10 @@ typedef struct
     http_method_t method;
     char url[HTTP_URL_MAX_LEN];
     char bearer_token[HTTP_HEADER_VALUE_MAX_LEN];
+    const char *body;
+    size_t body_len;
+    const char *content_type;
+    bool skip_tls_verify;
     uint32_t timeout_ms;
 } http_request_t;
 
@@ -41,9 +46,21 @@ typedef struct
 void http_request_init(http_request_t *request);
 bool http_request_set_url(http_request_t *request, const char *url);
 bool http_request_set_bearer_token(http_request_t *request, const char *token);
+bool http_request_set_body(http_request_t *request, const char *body, size_t body_len);
+bool http_request_set_content_type(http_request_t *request, const char *content_type);
+bool http_request_set_skip_tls_verify(http_request_t *request, bool skip);
+bool http_client_request(const http_request_t *request,
+                         char *response_buffer,
+                         size_t response_buffer_len,
+                         http_response_meta_t *meta);
+
 bool http_client_get_json(const http_request_t *request,
                           char *response_buffer,
                           size_t response_buffer_len,
                           http_response_meta_t *meta);
+bool http_client_get_binary(const http_request_t *request,
+                            uint8_t *response_buffer,
+                            size_t response_buffer_len,
+                            http_response_meta_t *meta);
 
 #endif

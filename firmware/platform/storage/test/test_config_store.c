@@ -7,80 +7,93 @@
 
 static const char *VALID_WIFI_JSON =
     "{"
-    "\"version\":1,"
+    "\"version\":3,"
     "\"wifi\":{\"enabled\":true,\"ssid\":\"Elvin_IoT\",\"password\":\"secret\"},"
-    "\"display\":{\"active_provider_id\":\"minimax-cn\",\"weather_enabled\":false},"
-    "\"providers\":[{\"id\":\"minimax-cn\",\"type\":\"minimax\",\"enabled\":true,\"region\":\"cn\",\"api_key\":\"key-1\"}]"
+    "\"display\":{\"image_url\":\"http://example.com/render\",\"image_refresh_seconds\":300}"
     "}";
 
 static const char *IMPLICIT_WIFI_ENABLE_JSON =
     "{"
-    "\"version\":1,"
+    "\"version\":3,"
     "\"wifi\":{\"ssid\":\"Elvin_IoT\",\"password\":\"secret\"},"
-    "\"display\":{\"active_provider_id\":\"minimax-cn\",\"weather_enabled\":false},"
-    "\"providers\":[{\"id\":\"minimax-cn\",\"type\":\"minimax\",\"enabled\":true,\"region\":\"cn\",\"api_key\":\"key-1\"}]"
+    "\"display\":{\"image_url\":\"http://example.com/render\",\"image_refresh_seconds\":300}"
     "}";
 
 static const char *MISSING_WIFI_SSID_JSON =
     "{"
-    "\"version\":1,"
+    "\"version\":3,"
     "\"wifi\":{\"enabled\":true,\"password\":\"secret\"},"
-    "\"display\":{\"active_provider_id\":\"minimax-cn\",\"weather_enabled\":false},"
-    "\"providers\":[{\"id\":\"minimax-cn\",\"type\":\"minimax\",\"enabled\":true,\"region\":\"cn\",\"api_key\":\"key-1\"}]"
+    "\"display\":{\"image_url\":\"http://example.com/render\",\"image_refresh_seconds\":300}"
     "}";
 
 static const char *VALID_SLEEP_SCHEDULE_JSON =
     "{"
-    "\"version\":1,"
+    "\"version\":3,"
     "\"device\":{"
     "\"timezone\":\"Asia/Shanghai\","
     "\"sleep_schedule\":{\"enabled\":true,\"wake_time\":\"08:00\",\"sleep_time\":\"24:00\",\"manual_wake_minutes\":7}"
     "},"
-    "\"display\":{\"active_provider_id\":\"minimax-cn\",\"weather_enabled\":false},"
-    "\"providers\":[{\"id\":\"minimax-cn\",\"type\":\"minimax\",\"enabled\":true,\"region\":\"cn\",\"api_key\":\"key-1\"}]"
+    "\"display\":{\"image_url\":\"http://example.com/render\",\"image_refresh_seconds\":300}"
     "}";
 
 static const char *CROSS_MIDNIGHT_SLEEP_SCHEDULE_JSON =
     "{"
-    "\"version\":1,"
+    "\"version\":3,"
     "\"device\":{"
     "\"sleep_schedule\":{\"enabled\":true,\"wake_time\":\"20:00\",\"sleep_time\":\"08:00\"}"
     "},"
-    "\"display\":{\"active_provider_id\":\"minimax-cn\",\"weather_enabled\":false},"
-    "\"providers\":[{\"id\":\"minimax-cn\",\"type\":\"minimax\",\"enabled\":true,\"region\":\"cn\",\"api_key\":\"key-1\"}]"
+    "\"display\":{\"image_url\":\"http://example.com/render\",\"image_refresh_seconds\":300}"
     "}";
 
 static const char *INVALID_SLEEP_SCHEDULE_JSON =
     "{"
-    "\"version\":1,"
+    "\"version\":3,"
     "\"device\":{"
     "\"sleep_schedule\":{\"enabled\":true,\"wake_time\":\"00:00\",\"sleep_time\":\"24:00\"}"
     "},"
-    "\"display\":{\"active_provider_id\":\"minimax-cn\",\"weather_enabled\":false},"
-    "\"providers\":[{\"id\":\"minimax-cn\",\"type\":\"minimax\",\"enabled\":true,\"region\":\"cn\",\"api_key\":\"key-1\"}]"
+    "\"display\":{\"image_url\":\"http://example.com/render\",\"image_refresh_seconds\":300}"
     "}";
 
 static const char *INVALID_MANUAL_WAKE_MINUTES_JSON =
     "{"
-    "\"version\":1,"
+    "\"version\":3,"
     "\"device\":{"
     "\"sleep_schedule\":{\"enabled\":true,\"wake_time\":\"08:00\",\"sleep_time\":\"24:00\",\"manual_wake_minutes\":-1}"
     "},"
-    "\"display\":{\"active_provider_id\":\"minimax-cn\",\"weather_enabled\":false},"
-    "\"providers\":[{\"id\":\"minimax-cn\",\"type\":\"minimax\",\"enabled\":true,\"region\":\"cn\",\"api_key\":\"key-1\"}]"
+    "\"display\":{\"image_url\":\"http://example.com/render\",\"image_refresh_seconds\":300}"
     "}";
 
 static const char *LATCHED_MANUAL_WAKE_MINUTES_JSON =
     "{"
-    "\"version\":1,"
+    "\"version\":3,"
     "\"device\":{"
     "\"sleep_schedule\":{\"enabled\":true,\"wake_time\":\"08:00\",\"sleep_time\":\"24:00\",\"manual_wake_minutes\":0}"
     "},"
-    "\"display\":{\"active_provider_id\":\"minimax-cn\",\"weather_enabled\":false},"
-    "\"providers\":[{\"id\":\"minimax-cn\",\"type\":\"minimax\",\"enabled\":true,\"region\":\"cn\",\"api_key\":\"key-1\"}]"
+    "\"display\":{\"image_url\":\"http://example.com/render\",\"image_refresh_seconds\":300}"
     "}";
 
-TEST_CASE("Config parser keeps Wi-Fi credentials and active provider", "[config][wifi]")
+static const char *INVALID_IMAGE_REFRESH_TOO_SMALL_JSON =
+    "{"
+    "\"version\":3,"
+    "\"wifi\":{\"enabled\":true,\"ssid\":\"Elvin_IoT\",\"password\":\"secret\"},"
+    "\"display\":{\"image_url\":\"http://example.com/render\",\"image_refresh_seconds\":5}"
+    "}";
+
+static const char *INVALID_IMAGE_REFRESH_TOO_BIG_JSON =
+    "{"
+    "\"version\":3,"
+    "\"wifi\":{\"enabled\":true,\"ssid\":\"Elvin_IoT\",\"password\":\"secret\"},"
+    "\"display\":{\"image_url\":\"http://example.com/render\",\"image_refresh_seconds\":100000}"
+    "}";
+
+static const char *MISSING_IMAGE_URL_JSON =
+    "{"
+    "\"version\":3,"
+    "\"wifi\":{\"enabled\":true,\"ssid\":\"Elvin_IoT\",\"password\":\"secret\"},"
+    "\"display\":{\"image_refresh_seconds\":300}"
+    "}";
+
+TEST_CASE("Config parser keeps Wi-Fi credentials and image URL", "[config][wifi]")
 {
     app_config_t config;
 
@@ -88,10 +101,8 @@ TEST_CASE("Config parser keeps Wi-Fi credentials and active provider", "[config]
     TEST_ASSERT_TRUE(config.wifi.enabled);
     TEST_ASSERT_EQUAL_STRING("Elvin_IoT", config.wifi.ssid);
     TEST_ASSERT_EQUAL_STRING("secret", config.wifi.password);
-    TEST_ASSERT_EQUAL_STRING("minimax-cn", config.display.active_provider_id);
-    TEST_ASSERT_EQUAL_UINT32(1, (uint32_t)config.provider_count);
-    TEST_ASSERT_TRUE(config.providers[0].enabled);
-    TEST_ASSERT_EQUAL(PROVIDER_TYPE_MINIMAX, config.providers[0].provider_type);
+    TEST_ASSERT_EQUAL_STRING("http://example.com/render", config.display.image_url);
+    TEST_ASSERT_EQUAL_UINT32(300, config.display.image_refresh_seconds);
 }
 
 TEST_CASE("Config parser auto-enables Wi-Fi when SSID is present", "[config][wifi]")
@@ -152,6 +163,57 @@ TEST_CASE("Config parser allows latched manual wake minutes", "[config][sleep]")
     TEST_ASSERT_TRUE(config_store_parse_json_text(LATCHED_MANUAL_WAKE_MINUTES_JSON, &config));
     TEST_ASSERT_TRUE(config.device.sleep_schedule.enabled);
     TEST_ASSERT_EQUAL_UINT16(0, config.device.sleep_schedule.manual_wake_minutes);
+}
+
+TEST_CASE("Config validation rejects image refresh too small", "[config][image]")
+{
+    app_config_t config;
+
+    TEST_ASSERT_FALSE(config_store_parse_json_text(INVALID_IMAGE_REFRESH_TOO_SMALL_JSON, &config));
+}
+
+TEST_CASE("Config validation rejects image refresh too big", "[config][image]")
+{
+    app_config_t config;
+
+    TEST_ASSERT_FALSE(config_store_parse_json_text(INVALID_IMAGE_REFRESH_TOO_BIG_JSON, &config));
+}
+
+TEST_CASE("Config validation rejects missing image URL", "[config][image]")
+{
+    app_config_t config;
+
+    TEST_ASSERT_FALSE(config_store_parse_json_text(MISSING_IMAGE_URL_JSON, &config));
+}
+
+TEST_CASE("Config defaults image URL and refresh when absent", "[config][image]")
+{
+    app_config_t config;
+    const char *json =
+        "{"
+        "\"version\":3,"
+        "\"wifi\":{\"enabled\":true,\"ssid\":\"Elvin_IoT\",\"password\":\"secret\"}"
+        "}";
+
+    TEST_ASSERT_TRUE(config_store_parse_json_text(json, &config));
+    TEST_ASSERT_EQUAL_STRING("http://124.221.91.97:39080/render", config.display.image_url);
+    TEST_ASSERT_EQUAL_UINT32(300, config.display.image_refresh_seconds);
+    TEST_ASSERT_FALSE(app_config_image_refresh_uses_wifi_duty_cycle(&config));
+}
+
+TEST_CASE("Config uses WiFi duty cycle for >=120s refresh", "[config][image]")
+{
+    app_config_t config;
+    const char *json =
+        "{"
+        "\"version\":3,"
+        "\"wifi\":{\"enabled\":true,\"ssid\":\"Elvin_IoT\",\"password\":\"secret\"},"
+        "\"display\":{\"image_refresh_seconds\":600}"
+        "}";
+
+    TEST_ASSERT_TRUE(config_store_parse_json_text(json, &config));
+    TEST_ASSERT_EQUAL_UINT32(600, config.display.image_refresh_seconds);
+    TEST_ASSERT_TRUE(app_config_image_refresh_uses_wifi_duty_cycle(&config));
 }
 
 TEST_CASE("Config precedence prefers valid SD over missing or stale NVS", "[config][precedence]")

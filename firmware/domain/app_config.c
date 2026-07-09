@@ -20,7 +20,7 @@ void app_config_init(app_config_t *config)
     }
 
     memset(config, 0, sizeof(*config));
-    config->version = 1;
+    config->version = 3;
     config->source = CONFIG_SOURCE_NONE;
     config->device.ntp_enabled = true;
     config->device.ntp_sync_hours = 24;
@@ -30,40 +30,30 @@ void app_config_init(app_config_t *config)
     config->device.sleep_schedule.sleep_minutes = APP_CONFIG_TIME_UNSET;
     config->device.sleep_schedule.manual_wake_minutes = 5;
     config->wifi.enabled = false;
+
+    strncpy(config->display.image_url,
+            APP_CONFIG_DEFAULT_IMAGE_URL,
+            sizeof(config->display.image_url) - 1);
+    config->display.image_refresh_seconds = APP_CONFIG_DEFAULT_IMAGE_REFRESH_SECONDS;
 }
 
-const provider_config_t *app_config_find_active_provider(const app_config_t *config)
+bool app_config_image_refresh_uses_wifi_duty_cycle(const app_config_t *config)
 {
-    size_t index;
-
-    if (config == NULL || !string_has_value(config->display.active_provider_id))
+    if (config == NULL)
     {
-        return NULL;
+        return false;
     }
-
-    for (index = 0; index < config->provider_count; ++index)
-    {
-        const provider_config_t *provider = &config->providers[index];
-
-        if (provider->enabled && strcmp(provider->id, config->display.active_provider_id) == 0)
-        {
-            return provider;
-        }
-    }
-
-    return NULL;
+    return config->display.image_refresh_seconds >= APP_CONFIG_WIFI_DUTY_CYCLE_THRESHOLD_SECONDS;
 }
 
 bool app_config_validate(const app_config_t *config)
 {
-    size_t index;
-
     if (config == NULL)
     {
         return false;
     }
 
-    if (config->version == 0 || config->provider_count > APP_CONFIG_MAX_PROVIDERS)
+    if (config->version == 0)
     {
         return false;
     }
@@ -101,34 +91,13 @@ bool app_config_validate(const app_config_t *config)
         return false;
     }
 
-    for (index = 0; index < config->provider_count; ++index)
+    if (!string_has_value(config->display.image_url))
     {
-        const provider_config_t *provider = &config->providers[index];
-        size_t compare_index;
-
-        if (!string_has_value(provider->id))
-        {
-            return false;
-        }
-
-        if (provider->enabled)
-        {
-            if (provider->provider_type == PROVIDER_TYPE_UNKNOWN || !string_has_value(provider->api_key))
-            {
-                return false;
-            }
-        }
-
-        for (compare_index = index + 1; compare_index < config->provider_count; ++compare_index)
-        {
-            if (strcmp(provider->id, config->providers[compare_index].id) == 0)
-            {
-                return false;
-            }
-        }
+        return false;
     }
 
-    if (string_has_value(config->display.active_provider_id) && app_config_find_active_provider(config) == NULL)
+    if (config->display.image_refresh_seconds < APP_CONFIG_MIN_IMAGE_REFRESH_SECONDS ||
+        config->display.image_refresh_seconds > APP_CONFIG_MAX_IMAGE_REFRESH_SECONDS)
     {
         return false;
     }

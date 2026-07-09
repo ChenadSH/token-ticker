@@ -5,8 +5,8 @@
 #include "display_port.h"
 #include "esp_log.h"
 
-#include "ui_home_screen.h"
-#include "ui_home_view_model.h"
+#include "ui_boot_model.h"
+#include "ui_image_overlay.h"
 #include "ui_sleep_screen.h"
 
 static const char *TAG = "token_ticker_ui";
@@ -103,42 +103,53 @@ static bool ui_app_boot_screen_init(const board_config_t *board)
 
 static void ui_app_render_home(const ui_boot_model_t *model)
 {
-    ui_home_view_model_t home_model;
+    ui_image_overlay_t overlay;
 
-    ui_home_view_model_build(model, &home_model);
-    ui_home_screen_update(&home_model);
+    if (model == NULL)
+    {
+        return;
+    }
+
+    memset(&overlay, 0, sizeof(overlay));
+    overlay.has_time = model->rtc_time.valid;
+    if (overlay.has_time)
+    {
+        snprintf(overlay.date_text,
+                 sizeof(overlay.date_text),
+                 "%02u-%02u",
+                 (unsigned)model->rtc_time.month,
+                 (unsigned)model->rtc_time.day);
+        snprintf(overlay.time_text,
+                 sizeof(overlay.time_text),
+                 "%02u:%02u",
+                 (unsigned)model->rtc_time.hour,
+                 (unsigned)model->rtc_time.minute);
+    }
+    if (model->power.valid)
+    {
+        overlay.has_battery = true;
+        overlay.battery_percent = model->power.battery_percent;
+        overlay.battery_charging = (model->power.charge_state == POWER_CHARGE_STATE_CHARGING);
+    }
+    overlay.has_image = model->has_image_loaded_epoch;
+    overlay.image_stale = false;
+
+    ui_image_overlay_update(&overlay);
     display_port_render();
-
-    ESP_LOGI(TAG, "home config=%s", home_model.config_text);
-    ESP_LOGI(TAG, "home config badge=%s", home_model.config_badge_text);
-    if (home_model.has_time)
-    {
-        ESP_LOGI(TAG, "home time=%s", home_model.time_text);
-    }
-    if (home_model.has_environment)
-    {
-        ESP_LOGI(TAG, "home env=%s", home_model.environment_text);
-    }
-    if (home_model.has_battery)
-    {
-        ESP_LOGI(TAG, "home battery=%s badge=%s", home_model.battery_text, home_model.battery_badge_text);
-    }
-    if (home_model.has_provider)
-    {
-        ESP_LOGI(TAG, "home provider=%s sync=%s bars=%u",
-                 home_model.provider_name_text,
-                 home_model.provider_sync_text,
-                 (unsigned)home_model.quota_bar_count);
-    }
 }
 
 static bool ui_app_show_home_scene(void)
 {
     if (s_scene != UI_APP_SCENE_HOME)
     {
+        lv_obj_t *screen = lv_screen_active();
+        if (screen != NULL)
+        {
+            lv_obj_clean(screen);
+        }
         (void)display_port_set_sleep(false);
-        ui_home_screen_reset();
-        if (!ui_home_screen_init())
+        ui_image_overlay_reset();
+        if (!ui_image_overlay_init())
         {
             return false;
         }
@@ -154,7 +165,7 @@ static bool ui_app_show_sleep_scene(void)
     if (s_scene != UI_APP_SCENE_SLEEP)
     {
         (void)display_port_set_sleep(false);
-        ui_home_screen_reset();
+        ui_image_overlay_reset();
         if (!ui_sleep_screen_show())
         {
             return false;
@@ -173,7 +184,7 @@ static bool ui_app_show_waking_scene(void)
     if (s_scene != UI_APP_SCENE_WAKING)
     {
         (void)display_port_set_sleep(false);
-        ui_home_screen_reset();
+        ui_image_overlay_reset();
         if (!ui_sleep_screen_show_waking())
         {
             return false;
@@ -271,10 +282,9 @@ void ui_app_boot(const ui_boot_model_t *model)
     s_boot_screen_ready = false;
     s_scene = UI_APP_SCENE_NONE;
 
-    ESP_LOGI(TAG, "ui boot with orientation=%s configured=%s weather=%s",
+    ESP_LOGI(TAG, "ui boot with orientation=%s configured=%s",
              model->board->display.landscape ? "landscape" : "portrait",
-             model->configured ? "yes" : "no",
-             model->weather_enabled ? "on" : "off");
+             model->configured ? "yes" : "no");
 
     ui_app_render_scene(model);
 }

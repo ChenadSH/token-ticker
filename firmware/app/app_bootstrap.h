@@ -9,8 +9,6 @@
 #include "board.h"
 #include "config_store.h"
 #include "power_service.h"
-#include "provider_poll_state.h"
-#include "provider_snapshot.h"
 #include "sensor_service.h"
 #include "ui_boot_model.h"
 
@@ -22,8 +20,6 @@ typedef struct
     app_runtime_mode_t runtime_mode;
     int64_t manual_override_until_monotonic;
     int64_t manual_override_until_epoch;
-    provider_poll_state_t provider_poll_state;
-    provider_snapshot_t boot_snapshot;
     power_status_t power_status;
     environment_sample_t environment;
     rtc_time_t rtc_time;

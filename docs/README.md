@@ -34,10 +34,18 @@ For a new human or agent joining the project, read these in order:
 
 - `adr/` - architecture decision records
 - `architecture/` - repository shape, firmware boundaries, roadmap
+- `development/` - in-flight development specs (e.g. `image-dashboard.md`)
 - `examples/` - operator-facing config examples and future captured fixtures
 - `harness/` - how AI agents are expected to work in this repo
 - `questions/` - unresolved product and technical decisions
 - `research/` - vendor facts, provider notes, reference-project analysis
+
+## Active Spec
+
+The current dashboard feature is defined in
+[`docs/development/image-dashboard.md`](development/image-dashboard.md).
+The older multi-domain PRD (`docs/architecture/multi-domain-dashboard.md`)
+is kept as reference but is superseded by the image-dashboard spec.
 
 ## Minimum Document Set For Continuing Firmware Work
 

@@ -19,7 +19,6 @@ void ui_boot_model_init(ui_boot_model_t *model,
     if (config != NULL)
     {
         model->configured = config_store_is_provisioned(config);
-        model->weather_enabled = config->display.weather_enabled;
         model->wifi_enabled = config->wifi.enabled;
     }
 
@@ -61,15 +60,15 @@ void ui_boot_model_set_rtc(ui_boot_model_t *model, const rtc_time_t *rtc_time)
     model->rtc_time = *rtc_time;
 }
 
-void ui_boot_model_set_provider_snapshot(ui_boot_model_t *model, const provider_snapshot_t *snapshot)
+void ui_boot_model_set_image_loaded(ui_boot_model_t *model, int64_t image_epoch_seconds)
 {
-    if (model == NULL || snapshot == NULL)
+    if (model == NULL || image_epoch_seconds <= 0)
     {
         return;
     }
 
-    model->provider_snapshot = *snapshot;
-    model->has_provider_snapshot = true;
+    model->image_loaded_epoch = image_epoch_seconds;
+    model->has_image_loaded_epoch = true;
 }
 
 void ui_boot_model_set_wifi_status(ui_boot_model_t *model, bool connected, bool has_rssi, int8_t rssi_dbm)
@@ -82,28 +81,6 @@ void ui_boot_model_set_wifi_status(ui_boot_model_t *model, bool connected, bool 
     model->wifi_connected = connected;
     model->wifi_has_rssi = has_rssi;
     model->wifi_rssi_dbm = has_rssi ? rssi_dbm : 0;
-}
-
-void ui_boot_model_set_provider_last_sync_time(ui_boot_model_t *model, const rtc_time_t *rtc_time)
-{
-    if (model == NULL || rtc_time == NULL)
-    {
-        return;
-    }
-
-    model->provider_last_sync_time = *rtc_time;
-    model->has_provider_last_sync_time = rtc_time->valid;
-}
-
-void ui_boot_model_set_provider_next_attempt_time(ui_boot_model_t *model, const rtc_time_t *rtc_time)
-{
-    if (model == NULL || rtc_time == NULL)
-    {
-        return;
-    }
-
-    model->provider_next_attempt_time = *rtc_time;
-    model->has_provider_next_attempt_time = rtc_time->valid;
 }
 
 void ui_boot_model_set_runtime_mode(ui_boot_model_t *model, app_runtime_mode_t runtime_mode)

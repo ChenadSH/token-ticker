@@ -25,6 +25,9 @@ bool rlcd_driver_init(rlcd_driver_t *driver, const board_config_t *board);
 void rlcd_driver_deinit(rlcd_driver_t *driver);
 void rlcd_driver_clear(rlcd_driver_t *driver, bool white);
 void rlcd_driver_set_pixel(rlcd_driver_t *driver, int x, int y, bool white);
+bool rlcd_driver_write_bitmap(rlcd_driver_t *driver,
+                              const uint8_t *bitmap,
+                              size_t bitmap_len);
 void rlcd_driver_display(rlcd_driver_t *driver);
 bool rlcd_driver_set_sleep(rlcd_driver_t *driver, bool sleep);
 

@@ -12,8 +12,6 @@ set(EXTRA_COMPONENT_DIRS
     platform/telemetry
     platform/time
     platform/wifi
-    providers/provider_registry
-    providers/minimax
     ui
 )
 

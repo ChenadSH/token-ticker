@@ -351,6 +351,27 @@ void rlcd_driver_display(rlcd_driver_t *driver)
     rlcd_send_buffer(driver, driver->framebuffer, driver->framebuffer_len);
 }
 
+bool rlcd_driver_write_bitmap(rlcd_driver_t *driver,
+                              const uint8_t *bitmap,
+                              size_t bitmap_len)
+{
+    if (driver == NULL || driver->framebuffer == NULL || bitmap == NULL)
+    {
+        return false;
+    }
+
+    if (bitmap_len != driver->framebuffer_len)
+    {
+        ESP_LOGW(TAG, "bitmap size mismatch got=%u expected=%u",
+                 (unsigned)bitmap_len,
+                 (unsigned)driver->framebuffer_len);
+        return false;
+    }
+
+    memcpy(driver->framebuffer, bitmap, bitmap_len);
+    return true;
+}
+
 bool rlcd_driver_set_sleep(rlcd_driver_t *driver, bool sleep)
 {
     if (driver == NULL || !driver->initialized)

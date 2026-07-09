@@ -1,5 +1,5 @@
 {
-    "version": 1,
+    "version": 3,
     "device": {
         "timezone": "Asia/Shanghai",
         "ntp_enabled": true,
@@ -17,19 +17,7 @@
         "password": "REPLACE_WITH_YOUR_WIFI_PASSWORD"
     },
     "display": {
-        "active_provider_id": "minimax-cn",
-        "weather_enabled": false
-    },
-    "providers": [
-        {
-            "id": "minimax-cn",
-            "type": "minimax",
-            "enabled": true,
-            "region": "cn",
-            "api_key": "REPLACE_WITH_YOUR_MINIMAX_API_KEY"
-        }
-    ],
-    "weather": {
-        "enabled": false
+        "image_url": "http://host:port/render",
+        "image_refresh_seconds": 300
     }
 }

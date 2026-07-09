@@ -12,9 +12,11 @@
 
 #include "app_key_input.h"
 #include "app_sleep_schedule.h"
-#include "provider_registry.h"
+#include "display_port.h"
+#include "http_client.h"
 #include "time_service.h"
 #include "ui_app.h"
+#include "ui_image_overlay.h"
 #include "wifi_platform.h"
 
 static const char *TAG = "app_runtime";
@@ -23,7 +25,9 @@ static const uint32_t WIFI_RUNTIME_WAIT_TIMEOUT_MS = 10000;
 static const uint32_t NTP_RUNTIME_WAIT_TIMEOUT_MS = 10000;
 static const uint32_t DEFAULT_MANUAL_OVERRIDE_SECONDS = 5 * 60;
 static const uint32_t FALLBACK_SLEEP_WAIT_SECONDS = 60;
+static const uint32_t IMAGE_FETCH_TIMEOUT_MS = 8000;
 static const char *SLEEP_TAG = "app_sleep";
+static const size_t IMAGE_FETCH_BUFFER_BYTES = 20480;
 
 static void app_runtime_update_ui_network_status(app_bootstrap_context_t *context);
 
@@ -244,55 +248,82 @@ static void app_runtime_update_ui_network_status(app_bootstrap_context_t *contex
     ui_boot_model_set_wifi_status(&context->ui_boot_model, wifi_platform_is_ready(), has_rssi, rssi_dbm);
 }
 
-static void app_runtime_update_ui_provider_timing(app_bootstrap_context_t *context,
-                                                  bool provider_request_ok)
+static bool app_runtime_fetch_and_push_image(app_bootstrap_context_t *context, bool *ui_needs_update)
 {
-    rtc_time_t next_attempt_time;
-    uint32_t next_interval_seconds;
+    http_request_t request;
+    uint8_t *image_buffer = NULL;
+    http_response_meta_t meta = {0};
+    bool ok = false;
 
-    if (context == NULL || !context->rtc_time.valid)
+    if (context == NULL || ui_needs_update == NULL)
     {
-        return;
+        return false;
     }
 
-    if (provider_request_ok)
+    if (!display_port_init(context->ui_boot_model.board))
     {
-        ui_boot_model_set_provider_last_sync_time(&context->ui_boot_model, &context->rtc_time);
+        ESP_LOGE(TAG, "display port init failed during image fetch");
+        return false;
     }
 
-    next_interval_seconds = provider_poll_state_next_interval_seconds(&context->provider_poll_state);
-    if (next_interval_seconds > 0 && app_rtc_add_seconds(&context->rtc_time, next_interval_seconds, &next_attempt_time))
+    image_buffer = heap_caps_malloc(IMAGE_FETCH_BUFFER_BYTES, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
+    if (image_buffer == NULL)
     {
-        ui_boot_model_set_provider_next_attempt_time(&context->ui_boot_model, &next_attempt_time);
-    }
-}
-
-static void app_runtime_set_provider_network_placeholder(const provider_interface_t *active_provider,
-                                                         const provider_config_t *active_config,
-                                                         provider_snapshot_t *snapshot)
-{
-    if (active_provider == NULL || active_config == NULL || snapshot == NULL)
-    {
-        return;
+        ESP_LOGE(TAG, "failed to allocate image buffer size=%u", (unsigned)IMAGE_FETCH_BUFFER_BYTES);
+        return false;
     }
 
-    provider_snapshot_init(snapshot);
-    snapshot->provider_type = active_provider->provider_type;
-    snapshot->sync_state = PROVIDER_SYNC_STATE_NETWORK_ERROR;
-    snapshot->stale = true;
-    snapshot->capabilities.supports_multiple_windows = true;
-    snapshot->capabilities.supports_manual_refresh = true;
-    snapshot->capabilities.supports_region_label = true;
-    snprintf(snapshot->provider_id, sizeof(snapshot->provider_id), "%s", active_config->id);
-    snprintf(snapshot->display_name, sizeof(snapshot->display_name), "%s", active_provider->display_name);
-    snprintf(snapshot->region, sizeof(snapshot->region), "%s", active_config->region);
-    snapshot->metric_count = 1;
-    snprintf(snapshot->metrics[0].label, sizeof(snapshot->metrics[0].label), "transport");
-    snprintf(snapshot->metrics[0].value_text,
-             sizeof(snapshot->metrics[0].value_text),
-             "%s",
-             wifi_platform_status_text());
-    snapshot->metrics[0].priority = 1;
+    http_request_init(&request);
+    if (!http_request_set_url(&request, context->config.display.image_url))
+    {
+        free(image_buffer);
+        return false;
+    }
+    request.timeout_ms = IMAGE_FETCH_TIMEOUT_MS;
+
+    if (!http_client_get_binary(&request, image_buffer, IMAGE_FETCH_BUFFER_BYTES, &meta) ||
+        meta.status != HTTP_CLIENT_STATUS_OK)
+    {
+        ESP_LOGW(TAG,
+                 "image fetch failed url=%s status=%d code=%u",
+                 context->config.display.image_url,
+                 (int)meta.status,
+                 (unsigned)meta.http_status_code);
+        free(image_buffer);
+        return false;
+    }
+
+    if (meta.bytes_received == 0)
+    {
+        ESP_LOGW(TAG, "image fetch returned zero bytes");
+        free(image_buffer);
+        return false;
+    }
+
+    /* Mark every overlay widget dirty BEFORE writing the bitmap. The BMP write
+       overwrites the whole framebuffer, so anything that LVGL has not already
+       scheduled for redraw would be skipped on the next lv_refr_now() and the
+       battery icon would never reappear on top of the new image. */
+    ui_image_overlay_invalidate();
+
+    if (!display_port_render_bmp(image_buffer, meta.bytes_received))
+    {
+        ESP_LOGE(TAG, "display_port_render_bmp failed bytes=%u", (unsigned)meta.bytes_received);
+        free(image_buffer);
+        return false;
+    }
+
+    free(image_buffer);
+    ok = true;
+
+    int64_t wall_epoch = 0;
+    if (app_rtc_time_to_epoch(&context->rtc_time, &wall_epoch))
+    {
+        ui_boot_model_set_image_loaded(&context->ui_boot_model, wall_epoch);
+    }
+    *ui_needs_update = true;
+    ui_image_overlay_mark_stale(false);
+    return ok;
 }
 
 static uint32_t app_runtime_compute_wait_seconds(const app_bootstrap_context_t *context, int64_t now_monotonic_seconds)
@@ -326,7 +357,7 @@ static uint32_t app_runtime_compute_wait_seconds(const app_bootstrap_context_t *
 
     wait_seconds = app_scheduler_next_wake_delay_seconds(&context->scheduler_state,
                                                          now_monotonic_seconds,
-                                                         &context->provider_poll_state,
+                                                         &context->config,
                                                          time_service_get_state());
 
     if (context->rtc_time.valid &&
@@ -527,17 +558,20 @@ static void app_runtime_run_active_cycle(app_bootstrap_context_t *context,
     app_scheduler_due_t due;
     bool network_work_due;
     bool network_ready = false;
-    bool provider_request_attempted = false;
-    bool provider_request_ok = false;
+    bool image_attempted = false;
+    bool image_ok = false;
+    bool duty_cycle_mode;
 
     if (context == NULL || ui_needs_update == NULL)
     {
         return;
     }
 
+    duty_cycle_mode = app_config_image_refresh_uses_wifi_duty_cycle(&context->config);
+
     app_scheduler_compute_due(&context->scheduler_state,
                               now_monotonic_seconds,
-                              &context->provider_poll_state,
+                              &context->config,
                               time_service_get_state(),
                               &due);
 
@@ -546,12 +580,11 @@ static void app_runtime_run_active_cycle(app_bootstrap_context_t *context,
         due.clock_due = true;
         due.environment_due = true;
         due.power_due = true;
-        due.provider_due = provider_registry_has_active();
-        provider_poll_state_note_manual_refresh(&context->provider_poll_state);
+        due.image_due = true;
     }
 
-    network_work_due = (due.provider_due && provider_registry_has_active()) || due.ntp_due;
-    if (network_work_due)
+    network_work_due = due.image_due || due.ntp_due;
+    if (network_work_due && context->config.wifi.enabled)
     {
         network_ready = wifi_platform_ensure_ready(&context->config, WIFI_RUNTIME_WAIT_TIMEOUT_MS);
         app_runtime_update_ui_network_status(context);
@@ -588,72 +621,26 @@ static void app_runtime_run_active_cycle(app_bootstrap_context_t *context,
         app_scheduler_note_power_polled(&context->scheduler_state, now_monotonic_seconds);
     }
 
-    if (due.provider_due && provider_registry_has_active())
+    if (due.image_due)
     {
-        bool changed = false;
-        const provider_interface_t *active_provider = provider_registry_get_active();
-        const provider_config_t *active_provider_config = provider_registry_get_active_config();
+        image_attempted = true;
 
-        provider_request_attempted = true;
-
-        if (!network_ready)
+        if (context->config.wifi.enabled && !network_ready)
         {
-            app_runtime_set_provider_network_placeholder(active_provider,
-                                                         active_provider_config,
-                                                         &context->boot_snapshot);
-            ui_boot_model_set_provider_snapshot(&context->ui_boot_model, &context->boot_snapshot);
-            *ui_needs_update = true;
-            provider_poll_state_note_failure(&context->provider_poll_state);
-            provider_request_ok = false;
-            ESP_LOGW(TAG, "provider refresh skipped: %s", wifi_platform_status_text());
-        }
-        else if (provider_registry_fetch_active_snapshot(&context->boot_snapshot))
-        {
-            ui_boot_model_set_provider_snapshot(&context->ui_boot_model, &context->boot_snapshot);
-            *ui_needs_update = true;
-
-            if (context->boot_snapshot.sync_state == PROVIDER_SYNC_STATE_OK)
-            {
-                provider_request_ok = true;
-                (void)provider_poll_state_note_success(&context->provider_poll_state,
-                                                       &context->boot_snapshot,
-                                                       false,
-                                                       &changed);
-                ESP_LOGI(TAG,
-                         "provider refresh sync=%d changed=%s next=%us",
-                         (int)context->boot_snapshot.sync_state,
-                         changed ? "yes" : "no",
-                         provider_poll_state_next_interval_seconds(&context->provider_poll_state));
-            }
-            else
-            {
-                provider_request_ok = false;
-                provider_poll_state_note_failure(&context->provider_poll_state);
-                ESP_LOGW(TAG,
-                         "provider refresh sync=%d next=%us",
-                         (int)context->boot_snapshot.sync_state,
-                         provider_poll_state_next_interval_seconds(&context->provider_poll_state));
-            }
+            ESP_LOGW(TAG, "image refresh skipped: %s", wifi_platform_status_text());
+            image_ok = false;
         }
         else
         {
-            provider_request_ok = false;
-            provider_poll_state_note_failure(&context->provider_poll_state);
+            image_ok = app_runtime_fetch_and_push_image(context, ui_needs_update);
         }
 
-        app_scheduler_note_provider_polled(&context->scheduler_state, now_monotonic_seconds);
+        app_scheduler_note_image_polled(&context->scheduler_state, now_monotonic_seconds);
     }
 
-    if (provider_request_attempted && app_runtime_refresh_rtc(context))
+    if (image_attempted && app_runtime_refresh_rtc(context))
     {
-        app_runtime_update_ui_provider_timing(context, provider_request_ok);
         *ui_needs_update = true;
-    }
-
-    if (due.weather_due)
-    {
-        app_scheduler_note_weather_polled(&context->scheduler_state, now_monotonic_seconds);
-        ESP_LOGI(TAG, "weather refresh due");
     }
 
     if (due.ntp_due)
@@ -672,7 +659,7 @@ static void app_runtime_run_active_cycle(app_bootstrap_context_t *context,
         app_scheduler_note_ntp_attempted(&context->scheduler_state, now_monotonic_seconds);
     }
 
-    if (network_work_due && context->config.wifi.enabled)
+    if (network_work_due && context->config.wifi.enabled && duty_cycle_mode)
     {
         (void)wifi_platform_stop();
         app_runtime_update_ui_network_status(context);

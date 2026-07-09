@@ -6,6 +6,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 
+#include "bmp_to_rlcd.h"
 #include "rlcd_driver.h"
 
 static const char *TAG = "display_port";
@@ -54,7 +55,6 @@ static void display_port_flush_cb(lv_display_t *disp, const lv_area_t *area, uin
                  (unsigned long)black_pixels);
     }
 
-    rlcd_driver_display(&s_rlcd_driver);
     lv_display_flush_ready(disp);
 }
 
@@ -124,10 +124,47 @@ bool display_port_set_sleep(bool sleep)
     return rlcd_driver_set_sleep(&s_rlcd_driver, sleep);
 }
 
+bool display_port_write_bitmap(const uint8_t *bitmap, size_t bitmap_len)
+{
+    if (s_display == NULL || !s_rlcd_driver.initialized)
+    {
+        return false;
+    }
+
+    if (!rlcd_driver_write_bitmap(&s_rlcd_driver, bitmap, bitmap_len))
+    {
+        return false;
+    }
+
+    rlcd_driver_display(&s_rlcd_driver);
+    return true;
+}
+
+bool display_port_render_bmp(const uint8_t *bmp, size_t bmp_size)
+{
+    if (s_display == NULL || !s_rlcd_driver.initialized)
+    {
+        return false;
+    }
+
+    if (!bmp_to_rlcd_write_bitmap(&s_rlcd_driver, bmp, bmp_size))
+    {
+        return false;
+    }
+
+    /* Compose any dirty LVGL widgets (the home-screen overlay, the sleep/waking
+       screen content, etc.) on top of the freshly-written bitmap so the bare
+       image is never pushed to the panel alone. */
+    lv_refr_now(s_display);
+    rlcd_driver_display(&s_rlcd_driver);
+    return true;
+}
+
 void display_port_render(void)
 {
     if (s_display != NULL && !s_rlcd_driver.sleeping)
     {
         (void)lv_timer_handler();
+        rlcd_driver_display(&s_rlcd_driver);
     }
 }

@@ -93,21 +93,6 @@ static void unmount_sdcard(void)
     s_sdcard_mounted = false;
 }
 
-static provider_type_t provider_type_from_string(const char *value)
-{
-    if (value == NULL)
-    {
-        return PROVIDER_TYPE_UNKNOWN;
-    }
-
-    if (strcmp(value, "minimax") == 0)
-    {
-        return PROVIDER_TYPE_MINIMAX;
-    }
-
-    return PROVIDER_TYPE_UNKNOWN;
-}
-
 static bool parse_hhmm_minutes(const char *value, bool allow_24h, uint16_t *minutes)
 {
     int hour;
@@ -177,48 +162,6 @@ static bool read_text_file(const char *path, char *buffer, size_t buffer_len)
     return read_len > 0;
 }
 
-static bool parse_provider_item(const cJSON *provider_item, provider_config_t *provider)
-{
-    const cJSON *id;
-    const cJSON *type;
-    const cJSON *enabled;
-    const cJSON *region;
-    const cJSON *api_key;
-
-    if (provider_item == NULL || provider == NULL)
-    {
-        return false;
-    }
-
-    id = cJSON_GetObjectItemCaseSensitive(provider_item, "id");
-    type = cJSON_GetObjectItemCaseSensitive(provider_item, "type");
-    enabled = cJSON_GetObjectItemCaseSensitive(provider_item, "enabled");
-    region = cJSON_GetObjectItemCaseSensitive(provider_item, "region");
-    api_key = cJSON_GetObjectItemCaseSensitive(provider_item, "api_key");
-
-    if (!cJSON_IsString(id) || id->valuestring == NULL ||
-        !cJSON_IsString(type) || type->valuestring == NULL)
-    {
-        return false;
-    }
-
-    memset(provider, 0, sizeof(*provider));
-    strncpy(provider->id, id->valuestring, sizeof(provider->id) - 1);
-    provider->provider_type = provider_type_from_string(type->valuestring);
-    provider->enabled = cJSON_IsBool(enabled) ? cJSON_IsTrue(enabled) : false;
-
-    if (cJSON_IsString(region) && region->valuestring != NULL)
-    {
-        strncpy(provider->region, region->valuestring, sizeof(provider->region) - 1);
-    }
-    if (cJSON_IsString(api_key) && api_key->valuestring != NULL)
-    {
-        strncpy(provider->api_key, api_key->valuestring, sizeof(provider->api_key) - 1);
-    }
-
-    return true;
-}
-
 config_store_load_result_t config_store_resolve_precedence(bool sd_valid,
                                                            const char *sd_json,
                                                            bool nvs_valid,
@@ -268,10 +211,6 @@ bool config_store_parse_json_text(const char *json_text, app_config_t *config)
     const cJSON *device;
     const cJSON *wifi;
     const cJSON *display;
-    const cJSON *weather;
-    const cJSON *providers;
-    const cJSON *item;
-    size_t provider_count = 0;
 
     if (json_text == NULL)
     {
@@ -394,51 +333,20 @@ bool config_store_parse_json_text(const char *json_text, app_config_t *config)
     display = cJSON_GetObjectItemCaseSensitive(root, "display");
     if (cJSON_IsObject(display))
     {
-        const cJSON *active_provider_id = cJSON_GetObjectItemCaseSensitive(display, "active_provider_id");
-        const cJSON *weather_enabled = cJSON_GetObjectItemCaseSensitive(display, "weather_enabled");
+        const cJSON *image_url = cJSON_GetObjectItemCaseSensitive(display, "image_url");
+        const cJSON *image_refresh_seconds = cJSON_GetObjectItemCaseSensitive(display, "image_refresh_seconds");
 
-        if (cJSON_IsString(active_provider_id) && active_provider_id->valuestring != NULL)
+        if (cJSON_IsString(image_url) && image_url->valuestring != NULL)
         {
-            strncpy(config->display.active_provider_id,
-                    active_provider_id->valuestring,
-                    sizeof(config->display.active_provider_id) - 1);
+            strncpy(config->display.image_url,
+                    image_url->valuestring,
+                    sizeof(config->display.image_url) - 1);
         }
-        if (cJSON_IsBool(weather_enabled))
+        if (cJSON_IsNumber(image_refresh_seconds) && image_refresh_seconds->valuedouble > 0)
         {
-            config->display.weather_enabled = cJSON_IsTrue(weather_enabled);
-        }
-    }
-
-    weather = cJSON_GetObjectItemCaseSensitive(root, "weather");
-    if (cJSON_IsObject(weather))
-    {
-        const cJSON *enabled = cJSON_GetObjectItemCaseSensitive(weather, "enabled");
-        if (cJSON_IsBool(enabled))
-        {
-            config->weather.enabled = cJSON_IsTrue(enabled);
+            config->display.image_refresh_seconds = (uint32_t)image_refresh_seconds->valuedouble;
         }
     }
-
-    providers = cJSON_GetObjectItemCaseSensitive(root, "providers");
-    if (cJSON_IsArray(providers))
-    {
-        cJSON_ArrayForEach(item, providers)
-        {
-            if (provider_count >= APP_CONFIG_MAX_PROVIDERS)
-            {
-                break;
-            }
-
-            if (!parse_provider_item(item, &config->providers[provider_count]))
-            {
-                cJSON_Delete(root);
-                return false;
-            }
-
-            ++provider_count;
-        }
-    }
-    config->provider_count = provider_count;
 
     cJSON_Delete(root);
     return app_config_validate(config);
@@ -552,15 +460,12 @@ void config_store_release_transient_resources(void)
 
 bool config_store_is_provisioned(const app_config_t *config)
 {
-    const provider_config_t *active_provider;
-
     if (config == NULL)
     {
         return false;
     }
 
-    active_provider = app_config_find_active_provider(config);
-    return active_provider != NULL && active_provider->api_key[0] != '\0';
+    return config->wifi.enabled && config->wifi.ssid[0] != '\0';
 }
 
 bool config_store_load_effective(app_config_t *config, config_store_state_t *state)
@@ -589,12 +494,6 @@ bool config_store_load_effective(app_config_t *config, config_store_state_t *sta
     }
 
     config->source = CONFIG_SOURCE_NONE;
-    config->provider_count = 1;
-    strncpy(config->providers[0].id, "minimax-cn", sizeof(config->providers[0].id) - 1);
-    config->providers[0].provider_type = PROVIDER_TYPE_MINIMAX;
-    config->providers[0].enabled = false;
-    strncpy(config->providers[0].region, "cn", sizeof(config->providers[0].region) - 1);
-    config->display.active_provider_id[0] = '\0';
 
     sd_json = malloc(CONFIG_JSON_MAX_LEN);
     nvs_json = malloc(CONFIG_JSON_MAX_LEN);

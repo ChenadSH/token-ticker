@@ -12,7 +12,6 @@
 #include "esp_system.h"
 #include "esp_timer.h"
 
-#include "provider_registry.h"
 #include "app_key_input.h"
 #include "app_sleep_schedule.h"
 #include "time_service.h"
@@ -59,8 +58,8 @@ static bool app_bootstrap_is_button_pressed(const board_config_t *board, int gpi
 
     config.pin_bit_mask = 1ULL << gpio_num;
     config.mode = GPIO_MODE_INPUT;
-    config.pull_up_en = board->buttons.active_low ? GPIO_PULLUP_ENABLE : GPIO_PULLUP_DISABLE;
-    config.pull_down_en = board->buttons.active_low ? GPIO_PULLDOWN_DISABLE : GPIO_PULLDOWN_ENABLE;
+    config.pull_up_en = board->buttons.active_low ? GPIO_PULLUP_ENABLE : GPIO_PULLDOWN_DISABLE;
+    config.pull_down_en = board->buttons.active_low ? GPIO_PULLDOWN_DISABLE : GPIO_PULLUP_ENABLE;
     config.intr_type = GPIO_INTR_DISABLE;
     if (gpio_config(&config) != ESP_OK)
     {
@@ -150,47 +149,6 @@ static bool app_epoch_to_rtc_time(int64_t epoch_seconds, rtc_time_t *rtc_time)
     return true;
 }
 
-static bool app_rtc_time_to_epoch(const rtc_time_t *rtc_time, int64_t *epoch_seconds)
-{
-    struct tm time_info;
-    time_t local_epoch;
-
-    if (rtc_time == NULL || epoch_seconds == NULL || !rtc_time->valid)
-    {
-        return false;
-    }
-
-    memset(&time_info, 0, sizeof(time_info));
-    time_info.tm_year = (int)rtc_time->year - 1900;
-    time_info.tm_mon = (int)rtc_time->month - 1;
-    time_info.tm_mday = (int)rtc_time->day;
-    time_info.tm_hour = (int)rtc_time->hour;
-    time_info.tm_min = (int)rtc_time->minute;
-    time_info.tm_sec = (int)rtc_time->second;
-    time_info.tm_isdst = -1;
-
-    local_epoch = mktime(&time_info);
-    if (local_epoch < 0)
-    {
-        return false;
-    }
-
-    *epoch_seconds = (int64_t)local_epoch;
-    return true;
-}
-
-static bool app_rtc_add_seconds(const rtc_time_t *base_time, uint32_t delta_seconds, rtc_time_t *result)
-{
-    int64_t epoch_seconds;
-
-    if (result == NULL || !app_rtc_time_to_epoch(base_time, &epoch_seconds))
-    {
-        return false;
-    }
-
-    return app_epoch_to_rtc_time(epoch_seconds + (int64_t)delta_seconds, result);
-}
-
 static void app_bootstrap_set_runtime_mode(app_bootstrap_context_t *context, app_runtime_mode_t runtime_mode)
 {
     if (context == NULL)
@@ -274,58 +232,6 @@ static void app_bootstrap_update_ui_network_status(app_bootstrap_context_t *cont
     ui_boot_model_set_wifi_status(&context->ui_boot_model, wifi_platform_is_ready(), has_rssi, rssi_dbm);
 }
 
-static void app_bootstrap_update_ui_provider_timing(app_bootstrap_context_t *context,
-                                                    bool has_active_provider,
-                                                    bool provider_request_ok)
-{
-    rtc_time_t next_attempt_time;
-    uint32_t next_interval_seconds;
-
-    if (context == NULL || !has_active_provider || !context->rtc_time.valid)
-    {
-        return;
-    }
-
-    if (provider_request_ok)
-    {
-        ui_boot_model_set_provider_last_sync_time(&context->ui_boot_model, &context->rtc_time);
-    }
-
-    next_interval_seconds = provider_poll_state_next_interval_seconds(&context->provider_poll_state);
-    if (next_interval_seconds > 0 && app_rtc_add_seconds(&context->rtc_time, next_interval_seconds, &next_attempt_time))
-    {
-        ui_boot_model_set_provider_next_attempt_time(&context->ui_boot_model, &next_attempt_time);
-    }
-}
-
-static void app_bootstrap_set_provider_network_placeholder(const provider_interface_t *active_provider,
-                                                           const provider_config_t *active_config,
-                                                           provider_snapshot_t *snapshot)
-{
-    if (active_provider == NULL || active_config == NULL || snapshot == NULL)
-    {
-        return;
-    }
-
-    provider_snapshot_init(snapshot);
-    snapshot->provider_type = active_provider->provider_type;
-    snapshot->sync_state = PROVIDER_SYNC_STATE_NETWORK_ERROR;
-    snapshot->stale = true;
-    snapshot->capabilities.supports_multiple_windows = true;
-    snapshot->capabilities.supports_manual_refresh = true;
-    snapshot->capabilities.supports_region_label = true;
-    snprintf(snapshot->provider_id, sizeof(snapshot->provider_id), "%s", active_config->id);
-    snprintf(snapshot->display_name, sizeof(snapshot->display_name), "%s", active_provider->display_name);
-    snprintf(snapshot->region, sizeof(snapshot->region), "%s", active_config->region);
-    snapshot->metric_count = 1;
-    snprintf(snapshot->metrics[0].label, sizeof(snapshot->metrics[0].label), "transport");
-    snprintf(snapshot->metrics[0].value_text,
-             sizeof(snapshot->metrics[0].value_text),
-             "%s",
-             wifi_platform_status_text());
-    snapshot->metrics[0].priority = 1;
-}
-
 void app_bootstrap_context_init(app_bootstrap_context_t *context)
 {
     if (context == NULL)
@@ -339,15 +245,10 @@ void app_bootstrap_context_init(app_bootstrap_context_t *context)
     context->runtime_mode = APP_RUNTIME_MODE_SCHEDULED_ACTIVE;
     context->manual_override_until_monotonic = 0;
     context->manual_override_until_epoch = 0;
-    provider_poll_state_init(&context->provider_poll_state);
 }
 
 bool app_bootstrap_run(const board_config_t *board, app_bootstrap_context_t *context)
 {
-    const provider_interface_t *active_provider;
-    bool provider_changed = false;
-    bool provider_request_ok = false;
-
     if (board == NULL || context == NULL)
     {
         return false;
@@ -379,14 +280,16 @@ bool app_bootstrap_run(const board_config_t *board, app_bootstrap_context_t *con
     ui_boot_model_init(&context->ui_boot_model, board, &context->config, &context->config_state);
     app_bootstrap_set_runtime_mode(context, APP_RUNTIME_MODE_SCHEDULED_ACTIVE);
     app_bootstrap_update_ui_network_status(context);
-    app_scheduler_init(&context->scheduler_state, context->config.display.weather_enabled);
+    app_scheduler_init(&context->scheduler_state);
     context->allow_automatic_light_sleep = app_bootstrap_should_allow_automatic_light_sleep(board);
     ESP_LOGI(TAG,
-             "config result=%d sd=%s nvs=%s configured=%s",
+             "config result=%d sd=%s nvs=%s configured=%s image_url=%s image_refresh=%us",
              (int)context->config_state.result,
              context->config_state.sd_available ? "yes" : "no",
              context->config_state.nvs_available ? "yes" : "no",
-             context->ui_boot_model.configured ? "yes" : "no");
+             context->ui_boot_model.configured ? "yes" : "no",
+             context->config.display.image_url,
+             (unsigned)context->config.display.image_refresh_seconds);
 
     power_service_init(board);
     sensor_service_init(board);
@@ -395,8 +298,6 @@ bool app_bootstrap_run(const board_config_t *board, app_bootstrap_context_t *con
                       context->config.device.ntp_sync_hours,
                       context->config.device.timezone);
     app_bootstrap_configure_runtime_power_management(false);
-
-    provider_registry_init(&context->config);
 
     if (sensor_service_read_rtc(&context->rtc_time))
     {
@@ -440,72 +341,6 @@ bool app_bootstrap_run(const board_config_t *board, app_bootstrap_context_t *con
         ESP_LOGI(TAG, "wifi skipped status=%s", wifi_platform_status_text());
     }
 
-    active_provider = provider_registry_get_active();
-    if (active_provider != NULL)
-    {
-        const provider_config_t *active_provider_config = provider_registry_get_active_config();
-        ui_app_show_boot_status(board, "BOOTING", "refreshing provider", 60);
-
-        ESP_LOGI(TAG,
-                 "active provider=%s interval=%us",
-                 active_provider->display_name,
-                 provider_poll_state_next_interval_seconds(&context->provider_poll_state));
-
-        if (!wifi_platform_is_ready())
-        {
-            app_bootstrap_set_provider_network_placeholder(active_provider,
-                                                           active_provider_config,
-                                                           &context->boot_snapshot);
-            ui_boot_model_set_provider_snapshot(&context->ui_boot_model, &context->boot_snapshot);
-            provider_request_ok = false;
-            provider_poll_state_note_failure(&context->provider_poll_state);
-            app_scheduler_note_provider_polled(&context->scheduler_state, esp_timer_get_time() / 1000000);
-            ESP_LOGW(TAG, "provider bootstrap fetch skipped: %s", wifi_platform_status_text());
-        }
-        else if (provider_registry_fetch_active_snapshot(&context->boot_snapshot))
-        {
-            ui_boot_model_set_provider_snapshot(&context->ui_boot_model, &context->boot_snapshot);
-
-            if (context->boot_snapshot.sync_state == PROVIDER_SYNC_STATE_OK)
-            {
-                provider_request_ok = true;
-                (void)provider_poll_state_note_success(
-                    &context->provider_poll_state,
-                    &context->boot_snapshot,
-                    false,
-                    &provider_changed);
-                ESP_LOGI(TAG,
-                         "seeded snapshot provider=%s sync_state=%d changed=%s next=%us",
-                         context->boot_snapshot.display_name,
-                         (int)context->boot_snapshot.sync_state,
-                         provider_changed ? "yes" : "no",
-                         provider_poll_state_next_interval_seconds(&context->provider_poll_state));
-            }
-            else
-            {
-                provider_request_ok = false;
-                provider_poll_state_note_failure(&context->provider_poll_state);
-                ESP_LOGW(TAG,
-                         "seeded snapshot provider=%s sync_state=%d next=%us",
-                         context->boot_snapshot.display_name,
-                         (int)context->boot_snapshot.sync_state,
-                         provider_poll_state_next_interval_seconds(&context->provider_poll_state));
-            }
-
-            app_scheduler_note_provider_polled(&context->scheduler_state, esp_timer_get_time() / 1000000);
-        }
-        else
-        {
-            provider_request_ok = false;
-            provider_poll_state_note_failure(&context->provider_poll_state);
-            app_scheduler_note_provider_polled(&context->scheduler_state, esp_timer_get_time() / 1000000);
-        }
-    }
-    else
-    {
-        ESP_LOGW(TAG, "no active provider configured");
-    }
-
     if (power_service_get_status(&context->power_status))
     {
         ui_boot_model_set_power(&context->ui_boot_model, &context->power_status);
@@ -535,7 +370,6 @@ bool app_bootstrap_run(const board_config_t *board, app_bootstrap_context_t *con
         ui_boot_model_set_rtc(&context->ui_boot_model, &context->rtc_time);
         app_scheduler_note_clock_rendered(&context->scheduler_state, esp_timer_get_time() / 1000000);
         app_bootstrap_apply_initial_sleep_schedule(context);
-        app_bootstrap_update_ui_provider_timing(context, active_provider != NULL, provider_request_ok);
         ESP_LOGI(TAG,
                  "rtc=%04u-%02u-%02u %02u:%02u:%02u",
                  context->rtc_time.year,
@@ -546,7 +380,8 @@ bool app_bootstrap_run(const board_config_t *board, app_bootstrap_context_t *con
                  context->rtc_time.second);
     }
 
-    if (context->config.wifi.enabled)
+    if (context->config.wifi.enabled &&
+        !app_config_image_refresh_uses_wifi_duty_cycle(&context->config))
     {
         (void)wifi_platform_stop();
         app_bootstrap_update_ui_network_status(context);

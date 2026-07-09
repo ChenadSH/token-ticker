@@ -7,11 +7,10 @@ enum
 {
     ENVIRONMENT_REFRESH_INTERVAL_SECONDS = 15 * 60,
     POWER_REFRESH_INTERVAL_SECONDS = 30 * 60,
-    WEATHER_REFRESH_INTERVAL_SECONDS = 60 * 60,
     NTP_RETRY_INTERVAL_SECONDS = 30 * 60,
 };
 
-void app_scheduler_init(app_scheduler_state_t *state, bool weather_enabled)
+void app_scheduler_init(app_scheduler_state_t *state)
 {
     if (state == NULL)
     {
@@ -19,18 +18,28 @@ void app_scheduler_init(app_scheduler_state_t *state, bool weather_enabled)
     }
 
     memset(state, 0, sizeof(*state));
-    state->weather_enabled = weather_enabled;
     state->last_clock_minute = -1;
+}
+
+static uint32_t app_scheduler_image_interval_seconds(const app_scheduler_state_t *state,
+                                                     const app_config_t *config)
+{
+    (void)state;
+    if (config == NULL || config->display.image_refresh_seconds == 0)
+    {
+        return APP_CONFIG_DEFAULT_IMAGE_REFRESH_SECONDS;
+    }
+    return config->display.image_refresh_seconds;
 }
 
 void app_scheduler_compute_due(const app_scheduler_state_t *state,
                                int64_t now_epoch_seconds,
-                               const provider_poll_state_t *provider_poll_state,
+                               const app_config_t *config,
                                const time_service_state_t *time_state,
                                app_scheduler_due_t *due)
 {
     int64_t current_minute;
-    uint32_t provider_interval_seconds;
+    uint32_t image_interval;
 
     if (state == NULL || due == NULL)
     {
@@ -47,26 +56,29 @@ void app_scheduler_compute_due(const app_scheduler_state_t *state,
     current_minute = now_epoch_seconds / 60;
     due->clock_due = current_minute != state->last_clock_minute;
 
-    provider_interval_seconds = provider_poll_state_next_interval_seconds(provider_poll_state);
-    due->provider_due = (state->last_provider_poll_epoch == 0) || (provider_interval_seconds > 0 && (now_epoch_seconds - state->last_provider_poll_epoch) >= (int64_t)provider_interval_seconds);
+    image_interval = app_scheduler_image_interval_seconds(state, config);
+    due->image_due = (state->last_image_poll_epoch == 0) ||
+                     ((now_epoch_seconds - state->last_image_poll_epoch) >= (int64_t)image_interval);
 
-    due->environment_due = (state->last_environment_poll_epoch == 0) || ((now_epoch_seconds - state->last_environment_poll_epoch) >= ENVIRONMENT_REFRESH_INTERVAL_SECONDS);
+    due->environment_due = (state->last_environment_poll_epoch == 0) ||
+                            ((now_epoch_seconds - state->last_environment_poll_epoch) >= ENVIRONMENT_REFRESH_INTERVAL_SECONDS);
 
-    due->power_due = (state->last_power_poll_epoch == 0) || ((now_epoch_seconds - state->last_power_poll_epoch) >= POWER_REFRESH_INTERVAL_SECONDS);
+    due->power_due = (state->last_power_poll_epoch == 0) ||
+                      ((now_epoch_seconds - state->last_power_poll_epoch) >= POWER_REFRESH_INTERVAL_SECONDS);
 
-    due->weather_due = state->weather_enabled && ((state->last_weather_poll_epoch == 0) || ((now_epoch_seconds - state->last_weather_poll_epoch) >= WEATHER_REFRESH_INTERVAL_SECONDS));
-
-    due->ntp_due = time_service_should_sync_ntp(now_epoch_seconds) && ((state->last_ntp_attempt_epoch == 0) || ((now_epoch_seconds - state->last_ntp_attempt_epoch) >= NTP_RETRY_INTERVAL_SECONDS));
+    due->ntp_due = time_service_should_sync_ntp(now_epoch_seconds) &&
+                    ((state->last_ntp_attempt_epoch == 0) ||
+                     ((now_epoch_seconds - state->last_ntp_attempt_epoch) >= NTP_RETRY_INTERVAL_SECONDS));
 }
 
 uint32_t app_scheduler_next_wake_delay_seconds(const app_scheduler_state_t *state,
                                                int64_t now_epoch_seconds,
-                                               const provider_poll_state_t *provider_poll_state,
+                                               const app_config_t *config,
                                                const time_service_state_t *time_state)
 {
     app_scheduler_due_t due;
     int64_t next_due_epoch = INT64_MAX;
-    uint32_t provider_interval_seconds;
+    uint32_t image_interval;
     int64_t ntp_interval_seconds;
     int64_t ntp_sync_epoch;
     int64_t ntp_retry_epoch;
@@ -76,13 +88,9 @@ uint32_t app_scheduler_next_wake_delay_seconds(const app_scheduler_state_t *stat
         return 1;
     }
 
-    app_scheduler_compute_due(state,
-                              now_epoch_seconds,
-                              provider_poll_state,
-                              time_state,
-                              &due);
+    app_scheduler_compute_due(state, now_epoch_seconds, config, time_state, &due);
 
-    if (due.clock_due || due.provider_due || due.environment_due || due.power_due || due.weather_due || due.ntp_due)
+    if (due.clock_due || due.image_due || due.environment_due || due.power_due || due.ntp_due)
     {
         return 1;
     }
@@ -92,13 +100,13 @@ uint32_t app_scheduler_next_wake_delay_seconds(const app_scheduler_state_t *stat
         next_due_epoch = ((state->last_clock_minute + 1) * 60);
     }
 
-    provider_interval_seconds = provider_poll_state_next_interval_seconds(provider_poll_state);
-    if (provider_interval_seconds > 0 && state->last_provider_poll_epoch > 0)
+    image_interval = app_scheduler_image_interval_seconds(state, config);
+    if (state->last_image_poll_epoch > 0)
     {
-        const int64_t provider_due_epoch = state->last_provider_poll_epoch + (int64_t)provider_interval_seconds;
-        if (provider_due_epoch < next_due_epoch)
+        const int64_t image_due_epoch = state->last_image_poll_epoch + (int64_t)image_interval;
+        if (image_due_epoch < next_due_epoch)
         {
-            next_due_epoch = provider_due_epoch;
+            next_due_epoch = image_due_epoch;
         }
     }
 
@@ -117,15 +125,6 @@ uint32_t app_scheduler_next_wake_delay_seconds(const app_scheduler_state_t *stat
         if (power_due_epoch < next_due_epoch)
         {
             next_due_epoch = power_due_epoch;
-        }
-    }
-
-    if (state->weather_enabled && state->last_weather_poll_epoch > 0)
-    {
-        const int64_t weather_due_epoch = state->last_weather_poll_epoch + WEATHER_REFRESH_INTERVAL_SECONDS;
-        if (weather_due_epoch < next_due_epoch)
-        {
-            next_due_epoch = weather_due_epoch;
         }
     }
 
@@ -168,14 +167,14 @@ void app_scheduler_note_clock_rendered(app_scheduler_state_t *state, int64_t now
     state->last_clock_minute = now_epoch_seconds / 60;
 }
 
-void app_scheduler_note_provider_polled(app_scheduler_state_t *state, int64_t now_epoch_seconds)
+void app_scheduler_note_image_polled(app_scheduler_state_t *state, int64_t now_epoch_seconds)
 {
     if (state == NULL || now_epoch_seconds < 0)
     {
         return;
     }
 
-    state->last_provider_poll_epoch = now_epoch_seconds;
+    state->last_image_poll_epoch = now_epoch_seconds;
 }
 
 void app_scheduler_note_environment_polled(app_scheduler_state_t *state, int64_t now_epoch_seconds)
@@ -196,16 +195,6 @@ void app_scheduler_note_power_polled(app_scheduler_state_t *state, int64_t now_e
     }
 
     state->last_power_poll_epoch = now_epoch_seconds;
-}
-
-void app_scheduler_note_weather_polled(app_scheduler_state_t *state, int64_t now_epoch_seconds)
-{
-    if (state == NULL || now_epoch_seconds < 0)
-    {
-        return;
-    }
-
-    state->last_weather_poll_epoch = now_epoch_seconds;
 }
 
 void app_scheduler_note_ntp_attempted(app_scheduler_state_t *state, int64_t now_epoch_seconds)

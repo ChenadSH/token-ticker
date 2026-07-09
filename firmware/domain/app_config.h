@@ -5,15 +5,19 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "provider_snapshot.h"
-
-#define APP_CONFIG_MAX_PROVIDERS 4
 #define APP_CONFIG_ID_LEN 32
 #define APP_CONFIG_SECRET_LEN 128
+#define APP_CONFIG_HOST_LEN 192
 #define APP_CONFIG_TZ_LEN 48
 #define APP_CONFIG_WIFI_SSID_LEN 33
 #define APP_CONFIG_WIFI_PASSWORD_LEN 65
+#define APP_CONFIG_IMAGE_URL_LEN 192
 #define APP_CONFIG_TIME_UNSET UINT16_MAX
+#define APP_CONFIG_DEFAULT_IMAGE_REFRESH_SECONDS 300
+#define APP_CONFIG_DEFAULT_IMAGE_URL "http://124.221.91.97:39080/render"
+#define APP_CONFIG_MIN_IMAGE_REFRESH_SECONDS 30
+#define APP_CONFIG_MAX_IMAGE_REFRESH_SECONDS 86400
+#define APP_CONFIG_WIFI_DUTY_CYCLE_THRESHOLD_SECONDS 120
 
 typedef enum
 {
@@ -48,23 +52,9 @@ typedef struct
 
 typedef struct
 {
-    bool weather_enabled;
-    char active_provider_id[APP_CONFIG_ID_LEN];
+    char image_url[APP_CONFIG_IMAGE_URL_LEN];
+    uint32_t image_refresh_seconds;
 } display_config_t;
-
-typedef struct
-{
-    bool enabled;
-} weather_config_t;
-
-typedef struct
-{
-    char id[APP_CONFIG_ID_LEN];
-    provider_type_t provider_type;
-    bool enabled;
-    char region[APP_CONFIG_ID_LEN];
-    char api_key[APP_CONFIG_SECRET_LEN];
-} provider_config_t;
 
 typedef struct
 {
@@ -73,13 +63,10 @@ typedef struct
     device_config_t device;
     app_wifi_config_t wifi;
     display_config_t display;
-    weather_config_t weather;
-    size_t provider_count;
-    provider_config_t providers[APP_CONFIG_MAX_PROVIDERS];
 } app_config_t;
 
 void app_config_init(app_config_t *config);
 bool app_config_validate(const app_config_t *config);
-const provider_config_t *app_config_find_active_provider(const app_config_t *config);
+bool app_config_image_refresh_uses_wifi_duty_cycle(const app_config_t *config);
 
 #endif
