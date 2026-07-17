@@ -302,6 +302,7 @@ bool app_bootstrap_run(const board_config_t *board, app_bootstrap_context_t *con
     if (sensor_service_read_rtc(&context->rtc_time))
     {
         ui_boot_model_set_rtc(&context->ui_boot_model, &context->rtc_time);
+        context->rtc_last_read_monotonic = (int64_t)(esp_timer_get_time() / 1000000ULL);
         app_scheduler_note_clock_rendered(&context->scheduler_state, esp_timer_get_time() / 1000000);
         app_bootstrap_apply_initial_sleep_schedule(context);
     }
@@ -330,6 +331,7 @@ bool app_bootstrap_run(const board_config_t *board, app_bootstrap_context_t *con
             {
                 (void)sensor_service_write_rtc(&context->rtc_time);
                 ui_boot_model_set_rtc(&context->ui_boot_model, &context->rtc_time);
+                context->rtc_last_read_monotonic = monotonic_seconds;
                 app_scheduler_note_clock_rendered(&context->scheduler_state, esp_timer_get_time() / 1000000);
             }
 
@@ -368,6 +370,7 @@ bool app_bootstrap_run(const board_config_t *board, app_bootstrap_context_t *con
     if (sensor_service_read_rtc(&context->rtc_time))
     {
         ui_boot_model_set_rtc(&context->ui_boot_model, &context->rtc_time);
+        context->rtc_last_read_monotonic = (int64_t)(esp_timer_get_time() / 1000000ULL);
         app_scheduler_note_clock_rendered(&context->scheduler_state, esp_timer_get_time() / 1000000);
         app_bootstrap_apply_initial_sleep_schedule(context);
         ESP_LOGI(TAG,

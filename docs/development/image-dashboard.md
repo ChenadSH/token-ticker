@@ -154,6 +154,7 @@ on top of the same framebuffer. Layout (all text in `lv_color_white()` on
 | Anchor              | Text                       | Font               | Notes |
 |---------------------|----------------------------|--------------------|-------|
 | top-left (x=8, y=4) | `MM-DD HH:MM`              | `montserrat_14`    | Updated every minute |
+| top-center (x≈176, y=4) | `in MM:SS`              | `montserrat_14`    | Time until next image refresh; hidden until the first successful poll |
 | top-right (x≈340, y=4) | `▮▮▮▮ 85%`             | `montserrat_14` + rect | Battery icon + percent |
 
 The overlay coordinates intentionally avoid the area reserved by the server

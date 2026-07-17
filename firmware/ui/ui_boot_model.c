@@ -71,6 +71,19 @@ void ui_boot_model_set_image_loaded(ui_boot_model_t *model, int64_t image_epoch_
     model->has_image_loaded_epoch = true;
 }
 
+void ui_boot_model_set_next_image_refresh(ui_boot_model_t *model, int64_t next_refresh_monotonic)
+{
+    if (model == NULL)
+    {
+        return;
+    }
+
+    /* A value of 0 means "no next refresh scheduled yet" and is used to hide
+       the countdown until the first image poll has happened. The value is in
+       the same monotonic time base as esp_timer_get_time() / 1000000. */
+    model->next_image_refresh_monotonic = next_refresh_monotonic;
+}
+
 void ui_boot_model_set_wifi_status(ui_boot_model_t *model, bool connected, bool has_rssi, int8_t rssi_dbm)
 {
     if (model == NULL)

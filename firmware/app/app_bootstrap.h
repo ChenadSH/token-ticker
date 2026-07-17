@@ -23,6 +23,7 @@ typedef struct
     power_status_t power_status;
     environment_sample_t environment;
     rtc_time_t rtc_time;
+    int64_t rtc_last_read_monotonic;
     app_scheduler_state_t scheduler_state;
     ui_boot_model_t ui_boot_model;
 } app_bootstrap_context_t;

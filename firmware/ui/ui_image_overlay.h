@@ -17,6 +17,8 @@ typedef struct
     bool battery_charging;
     bool has_image;
     bool image_stale;
+    bool has_next_refresh;
+    char next_refresh_text[UI_IMAGE_OVERLAY_TEXT_LEN];
 } ui_image_overlay_t;
 
 bool ui_image_overlay_init(void);

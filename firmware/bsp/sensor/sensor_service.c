@@ -15,6 +15,7 @@ enum
     SHTC3_CMD_READ_ID = 0xEFC8,
     SHTC3_CMD_WAKEUP = 0x3517,
     SHTC3_CMD_SOFT_RESET = 0x805D,
+    SHTC3_CMD_SLEEP = 0xB219,
     SHTC3_CMD_MEASURE_T_RH = 0x7866,
     I2C_TIMEOUT_MS = 1000,
     SHTC3_TEMP_OFFSET_C = 4,
@@ -205,7 +206,10 @@ bool sensor_service_read_environment(environment_sample_t *sample)
 
     vTaskDelay(pdMS_TO_TICKS(20));
     error = i2c_master_receive(s_shtc3_dev, bytes, sizeof(bytes), pdMS_TO_TICKS(I2C_TIMEOUT_MS));
-    (void)shtc3_write_command(SHTC3_CMD_SOFT_RESET);
+    /* Send the chip to sleep (typ ~0.4 uA) instead of soft-resetting it back
+       to idle. The next read path already issues WAKEUP before MEASURE, so
+       no extra round-trip is needed to recover from sleep. */
+    (void)shtc3_write_command(SHTC3_CMD_SLEEP);
     if (error != ESP_OK)
     {
         return false;

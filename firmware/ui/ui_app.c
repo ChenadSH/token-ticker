@@ -1,9 +1,11 @@
 #include "ui_app.h"
 
 #include <stdio.h>
+#include <time.h>
 
 #include "display_port.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 
 #include "ui_boot_model.h"
 #include "ui_image_overlay.h"
@@ -133,6 +135,30 @@ static void ui_app_render_home(const ui_boot_model_t *model)
     }
     overlay.has_image = model->has_image_loaded_epoch;
     overlay.image_stale = false;
+
+    if (model->next_image_refresh_monotonic > 0)
+    {
+        int64_t now_monotonic = (int64_t)(esp_timer_get_time() / 1000000ULL);
+        int64_t remaining = model->next_image_refresh_monotonic - now_monotonic;
+
+        if (remaining < 0)
+        {
+            remaining = 0;
+        }
+        /* Runtime wakes on minute boundaries, so the seconds field would always
+           be zero. Drop it and round down to whole minutes for a value that
+           actually changes once per minute. */
+        uint32_t minutes = (uint32_t)(remaining / 60);
+        if (minutes > 99)
+        {
+            minutes = 99;
+        }
+        snprintf(overlay.next_refresh_text,
+                 sizeof(overlay.next_refresh_text),
+                 "in %umin",
+                 (unsigned)minutes);
+        overlay.has_next_refresh = true;
+    }
 
     ui_image_overlay_update(&overlay);
     display_port_render();

@@ -37,6 +37,12 @@ static const lv_font_t *FONT_OVERLAY = &lv_font_montserrat_14;
 #define UI_HOME_STALE_W 50
 #define UI_HOME_STALE_RIGHT (UI_HOME_TIME_LEFT + UI_HOME_TIME_W + 6)
 #define UI_HOME_STALE_LEFT (UI_HOME_STALE_RIGHT - UI_HOME_STALE_W)
+#define UI_HOME_NEXT_REFRESH_W 110
+/* Park the countdown in the empty band between time and the battery strip
+   (x=126..302). Anchoring it to UI_HOME_STALE_LEFT would put the label
+   inside the time region (x=76) and let the time widget paint over it. */
+#define UI_HOME_NEXT_REFRESH_LEFT (UI_HOME_STALE_RIGHT)
+#define UI_HOME_NEXT_REFRESH_TOP 6
 
 typedef struct
 {
@@ -44,6 +50,7 @@ typedef struct
     lv_obj_t *date_label;
     lv_obj_t *time_label;
     lv_obj_t *stale_label;
+    lv_obj_t *next_refresh_label;
     lv_obj_t *battery_pct_label;
     lv_obj_t *battery_outline;
     lv_obj_t *battery_fill;
@@ -153,12 +160,20 @@ bool ui_image_overlay_init(void)
                                                UI_HOME_TIME_W,
                                                LV_TEXT_ALIGN_LEFT);
     s_overlay.stale_label = ui_image_create_label(screen,
-                                                FONT_OVERLAY,
-                                                lv_color_white(),
-                                                UI_HOME_STALE_LEFT,
-                                                6,
-                                                UI_HOME_STALE_W,
-                                                LV_TEXT_ALIGN_LEFT);
+                                                 FONT_OVERLAY,
+                                                 lv_color_white(),
+                                                 UI_HOME_STALE_LEFT,
+                                                 6,
+                                                 UI_HOME_STALE_W,
+                                                 LV_TEXT_ALIGN_LEFT);
+
+    s_overlay.next_refresh_label = ui_image_create_label(screen,
+                                                         FONT_OVERLAY,
+                                                         lv_color_white(),
+                                                         UI_HOME_NEXT_REFRESH_LEFT,
+                                                         UI_HOME_NEXT_REFRESH_TOP,
+                                                         UI_HOME_NEXT_REFRESH_W,
+                                                         LV_TEXT_ALIGN_LEFT);
 
     s_overlay.battery_pct_label = ui_image_create_label(screen,
                                                      FONT_OVERLAY,
@@ -219,6 +234,7 @@ void ui_image_overlay_invalidate(void)
     if (s_overlay.date_label != NULL) lv_obj_invalidate(s_overlay.date_label);
     if (s_overlay.time_label != NULL) lv_obj_invalidate(s_overlay.time_label);
     if (s_overlay.stale_label != NULL) lv_obj_invalidate(s_overlay.stale_label);
+    if (s_overlay.next_refresh_label != NULL) lv_obj_invalidate(s_overlay.next_refresh_label);
     if (s_overlay.battery_pct_label != NULL) lv_obj_invalidate(s_overlay.battery_pct_label);
     if (s_overlay.battery_outline != NULL) lv_obj_invalidate(s_overlay.battery_outline);
     if (s_overlay.battery_fill != NULL) lv_obj_invalidate(s_overlay.battery_fill);
@@ -232,6 +248,7 @@ static void ui_image_overlay_show_widgets(bool show)
         if (s_overlay.date_label != NULL) lv_obj_clear_flag(s_overlay.date_label, LV_OBJ_FLAG_HIDDEN);
         if (s_overlay.time_label != NULL) lv_obj_clear_flag(s_overlay.time_label, LV_OBJ_FLAG_HIDDEN);
         if (s_overlay.stale_label != NULL) lv_obj_clear_flag(s_overlay.stale_label, LV_OBJ_FLAG_HIDDEN);
+        if (s_overlay.next_refresh_label != NULL) lv_obj_clear_flag(s_overlay.next_refresh_label, LV_OBJ_FLAG_HIDDEN);
         if (s_overlay.battery_pct_label != NULL) lv_obj_clear_flag(s_overlay.battery_pct_label, LV_OBJ_FLAG_HIDDEN);
         if (s_overlay.battery_outline != NULL) lv_obj_clear_flag(s_overlay.battery_outline, LV_OBJ_FLAG_HIDDEN);
         if (s_overlay.battery_fill != NULL) lv_obj_clear_flag(s_overlay.battery_fill, LV_OBJ_FLAG_HIDDEN);
@@ -242,6 +259,7 @@ static void ui_image_overlay_show_widgets(bool show)
         if (s_overlay.date_label != NULL) lv_obj_add_flag(s_overlay.date_label, LV_OBJ_FLAG_HIDDEN);
         if (s_overlay.time_label != NULL) lv_obj_add_flag(s_overlay.time_label, LV_OBJ_FLAG_HIDDEN);
         if (s_overlay.stale_label != NULL) lv_obj_add_flag(s_overlay.stale_label, LV_OBJ_FLAG_HIDDEN);
+        if (s_overlay.next_refresh_label != NULL) lv_obj_add_flag(s_overlay.next_refresh_label, LV_OBJ_FLAG_HIDDEN);
         if (s_overlay.battery_pct_label != NULL) lv_obj_add_flag(s_overlay.battery_pct_label, LV_OBJ_FLAG_HIDDEN);
         if (s_overlay.battery_outline != NULL) lv_obj_add_flag(s_overlay.battery_outline, LV_OBJ_FLAG_HIDDEN);
         if (s_overlay.battery_fill != NULL) lv_obj_add_flag(s_overlay.battery_fill, LV_OBJ_FLAG_HIDDEN);
@@ -274,6 +292,18 @@ void ui_image_overlay_update(const ui_image_overlay_t *overlay)
     {
         lv_label_set_text(s_overlay.time_label,
                           overlay->time_text[0] != '\0' ? overlay->time_text : "");
+    }
+    if (s_overlay.next_refresh_label != NULL)
+    {
+        if (overlay->has_next_refresh)
+        {
+            lv_label_set_text(s_overlay.next_refresh_label,
+                              overlay->next_refresh_text[0] != '\0' ? overlay->next_refresh_text : "");
+        }
+        else
+        {
+            lv_label_set_text(s_overlay.next_refresh_label, "");
+        }
     }
     if (s_overlay.battery_pct_label != NULL)
     {

@@ -225,11 +225,23 @@ static bool app_runtime_refresh_rtc(app_bootstrap_context_t *context)
         return false;
     }
 
+    int64_t now_monotonic = (int64_t)(esp_timer_get_time() / 1000000ULL);
+
+    /* Cache by monotonic minute. The minute is the unit of freshness for the
+       clock label and the countdown, so re-reading the RTC multiple times
+       within the same minute is wasted I2C traffic. */
+    if (context->rtc_last_read_monotonic > 0 &&
+        (now_monotonic / 60) == (context->rtc_last_read_monotonic / 60))
+    {
+        return true;
+    }
+
     if (!sensor_service_read_rtc(&context->rtc_time))
     {
         return false;
     }
 
+    context->rtc_last_read_monotonic = now_monotonic;
     ui_boot_model_set_rtc(&context->ui_boot_model, &context->rtc_time);
     return true;
 }
@@ -636,6 +648,12 @@ static void app_runtime_run_active_cycle(app_bootstrap_context_t *context,
         }
 
         app_scheduler_note_image_polled(&context->scheduler_state, now_monotonic_seconds);
+
+        /* Expose the next due time to the UI regardless of success so the
+           countdown label keeps ticking even if this poll failed. */
+        int64_t next_monotonic = now_monotonic_seconds +
+                                 (int64_t)context->config.display.image_refresh_seconds;
+        ui_boot_model_set_next_image_refresh(&context->ui_boot_model, next_monotonic);
     }
 
     if (image_attempted && app_runtime_refresh_rtc(context))
